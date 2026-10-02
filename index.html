@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo de Treino de Fala com Bandeiras</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 90%;
+        }
+        h1 { margin-top: 0; font-size: 24px; }
+        .score-board { font-size: 18px; margin-bottom: 20px; font-weight: bold; }
+        .flag-box {
+            font-size: 100px;
+            margin: 20px 0;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px;
+            border-radius: 15px;
+            display: inline-block;
+            line-height: 1;
+        }
+        select, button {
+            padding: 12px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 10px;
+            margin: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        select { background: white; color: #333; }
+        .btn-mic {
+            background-color: #ff4757;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4);
+        }
+        .btn-mic:disabled { background-color: #747d8c; box-shadow: none; }
+        .btn-next { background-color: #2ed573; color: white; display: none; }
+        .status { font-size: 18px; margin: 15px 0; min-height: 24px; font-weight: 500; }
+        .transcript { color: #ffeaa7; font-style: italic; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Jogo das Bandeiras (Treino de Fala) 🌍</h1>
+    
+    <label for="langSelect">Escolha o idioma do jogo:</label><br>
+    <select id="langSelect" onchange="changeLanguage()">
+        <option value="pt-PT">Português (Portugal)</option>
+        <option value="pt-BR">Português (Brasil)</option>
+        <option value="en-US">English (USA)</option>
+        <option value="es-ES">Español (España)</option>
+        <option value="fr-FR">Français</option>
+    </select>
+
+    <div class="score-board">Pontuação: <span id="score">0</span></div>
+    
+    <div class="flag-box" id="flagDisplay">🇵🇹</div>
+    
+    <div class="status" id="statusText">Selecione o idioma e clique no microfone para responder!</div>
+    <div class="transcript" id="transcriptText"></div>
+
+    <button class="btn-mic" id="micBtn" onclick="startSpeech()">🎤 Clicar e Falar</button>
+    <button class="btn-next" id="nextBtn" onclick="nextRound()">Próxima Bandeira ➡️</button>
+</div>
+
+<script>
+    const dataset = {
+        "pt-PT": [
+            { flag: "🇵🇹", names: ["portugal"] },
+            { flag: "🇧🇷", names: ["brasil"] },
+            { flag: "🇪🇸", names: ["espanha"] },
+            { flag: "🇫🇷", names: ["frança"] },
+            { flag: "🇬🇧", names: ["reino unido", "inglaterra"] },
+            { flag: "🇺🇸", names: ["estados unidos"] },
+            { flag: "🇮🇹", names: ["itália"] },
+            { flag: "🇩🇪", names: ["alemanha"] },
+            { flag: "🇦record", names: ["angola"] }
+        ],
+        "pt-BR": [
+            { flag: "🇧🇷", names: ["brasil"] },
+            { flag: "🇵🇹", names: ["portugal"] },
+            { flag: "🇺🇸", names: ["estados unidos"] },
+            { flag: "🇪🇸", names: ["espanha"] },
+            { flag: "🇦🇷", names: ["argentina"] }
+        ],
+        "en-US": [
+            { flag: "🇺🇸", names: ["united states", "usa", "america"] },
+            { flag: "🇬🇧", names: ["united kingdom", "uk", "england"] },
+            { flag: "🇨🇦", names: ["canada"] },
+            { flag: "🇦🇺", names: ["australia"] },
+            { flag: "🇯🇵", names: ["japan"] }
+        ],
+        "es-ES": [
+            { flag: "🇪🇸", names: ["españa"] },
+            { flag: "🇲🇽", names: ["méxico", "mexico"] },
+            { flag: "🇦🇷", names: ["argentina"] },
+            { flag: "🇨🇱", names: ["chile"] },
+            { flag: "🇨🇴", names: ["colombia"] }
+        ],
+        "fr-FR": [
+            { flag: "🇫🇷", names: ["france"] },
+            { flag: "🇨🇦", names: ["canada"] },
+            { flag: "🇧🇪", names: ["belgique"] },
+            { flag: "🇨🇭", names: ["suisse"] }
+        ]
+    };
+
+    let currentLanguage = "pt-PT";
+    let currentRoundData = {};
+    let score = 0;
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.interimResults = false;
+        recognition.continuous = false;
+    } else {
+        document.getElementById('statusText').innerText = "O seu navegador não suporta reconhecimento de voz. Tente no Safari/Chrome do iPad atualizado.";
+        document.getElementById('micBtn').disabled = true;
+    }
+
+    function initGame() {
+        nextRound();
+    }
+
+    function changeLanguage() {
+        currentLanguage = document.getElementById("langSelect").value;
+        score = 0;
+        document.getElementById("score").innerText = score;
+        nextRound();
+    }
+
+    function nextRound() {
+        const options = dataset[currentLanguage];
+        const randomIndex = Math.floor(Math.random() * options.length);
+        currentRoundData = options[randomIndex];
+        
+        document.getElementById("flagDisplay").innerText = currentRoundData.flag;
+        document.getElementById("statusText").innerText = "Estou a ouvir... Clique no botão e diga o nome do país!";
+        document.getElementById("transcriptText").innerText = "";
+        document.getElementById("nextBtn").style.display = "none";
+        document.getElementById("micBtn").style.display = "inline-block";
+    }
+
+    function startSpeech() {
+        if (!recognition) return;
+        recognition.lang = currentLanguage;
+        recognition.start();
+        document.getElementById("statusText").innerText = "🎙️ Pode falar agora...";
+        document.getElementById("micBtn").disabled = true;
+
+        recognition.onresult = function(event) {
+            const resultText = event.results[0][0].transcript.toLowerCase().trim().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+            document.getElementById("transcriptText").innerText = 'Disse: "' + resultText + '"';
+            
+            let isCorrect = currentRoundData.names.some(name => resultText.includes(name) || name.includes(resultText));
+
+            if (isCorrect) {
+                document.getElementById("statusText").innerText = "🎉 RESPOSTA CORRETA! Parabéns!";
+                score++;
+                document.getElementById("score").innerText = score;
+            } else {
+                document.getElementById("statusText").innerText = "❌ Resposta errada. Tente novamente!";
+            }
+            
+            endTurn();
+        };
+
+        recognition.onerror = function() {
+            document.getElementById("statusText").innerText = "⚠️ Não consegui ouvir bem. Tente outra vez.";
+            endTurn();
+        };
+
+        recognition.onspeechend = function() {
+            recognition.stop();
+        };
+    }
+
+    function endTurn() {
+        document.getElementById("micBtn").disabled = false;
+        document.getElementById("micBtn").style.display = "none";
+        document.getElementById("nextBtn").style.display = "inline-block";
+    }
+
+    window.onload = initGame;
+</script>
+
+</body>
+</html>
